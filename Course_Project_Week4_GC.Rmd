@@ -1,0 +1,118 @@
+---
+title: "Course Project - Machine Learning"
+author: "Gabriela Conde"
+date: "25/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Executive summary
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, using data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants and classification algorithms, an answer to that question will be provided.
+
+The data used for this project comes from:
+
+
+<http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har>
+
+(see the section on the Weight Lifting Exercise Dataset).
+
+In order to select the best model that explains how well people perform weight lifting, a classification tree and Support Vector Machine algorithms were trained. After considering their accuracy in the training set, one of them was selected, cross-validated and use to predict on the testing set.
+
+```{r echo=FALSE, message=FALSE}
+packs<-c("caret","e1071","dplyr", "rattle")
+invisible(lapply(packs, require, character.only = TRUE))
+
+```
+
+## 2. Loading and exploring the data
+
+
+```{r echo=FALSE}
+setwd("C:/Users/condgabriela/Curso R/Machine Learning")
+training<-read.csv("pml-training.csv")
+testing<-read.csv("pml-testing.csv")
+
+str(training)
+str(training$classe)
+
+```
+
+Previous to train the algorithms, relevant variables were converted into factor ones and those with missing values and zeroes were removed from the training set.
+
+```{r echo=FALSE}
+training$classe<-as.factor(training$classe)
+
+testing_clean<-select_if(testing, ~!all(is.na(.)))
+training_clean<-filter(training, new_window=="no")
+training_clean<-select_if(training_clean, ~!all(is.na(.)))
+
+training_clean<-training_clean[, !sapply(training_clean, is.character)]
+testing_clean<-testing_clean[, !sapply(testing_clean, is.character)]
+
+training_clean<-select(training_clean, where(~ any(. != 0)))
+
+training_clean<-training_clean[, 5:57]
+testing_clean<-testing_clean[, 5:57]
+```
+
+## 3. Classification algorithms
+#### 3.1 Tree
+
+
+```{r echo=FALSE }
+modFit_tree<-train(classe~., method="rpart", data=training_clean)
+
+tree_predict<-predict(modFit_tree, testing_clean)
+tree_predict2<-predict(modFit_tree, training_clean[,-57])
+
+cmatrix_tree<-confusionMatrix(training_clean$classe, tree_predict2)
+
+
+```
+
+```{r echo=TRUE }
+
+cmatrix_tree
+
+fancyRpartPlot(modFit_tree$finalModel)
+
+```
+
+As can be seen for both the table with the predictions and the Accuracy (50%) in the confusion matrix, the model does not perform very well
+
+#### 3.2 Support Vector Machine
+
+
+```{r echo=FALSE }
+modFit_SVM<-svm(classe~., data = training_clean, cost = 100, gamma = 1)
+SVM_predict<-predict(modFit_SVM, testing_clean)
+SVM_predict2<-predict(modFit_SVM, training_clean[,-57])
+
+cmatrix_SVM<-confusionMatrix(training_clean$classe, SVM_predict2)
+
+```
+
+```{r echo=TRUE }
+
+cmatrix_SVM
+
+```
+
+The Support vector Machine algorithm trained in the training set has a better performance than that of classification tree: all outcomes are predicted correctly which results in a 100% Accuracy. 
+
+Ten fold cross-validation of the algorithm was performed with the following function (it takes more than 90 minutes to run):
+
+
+```{r echo=TRUE }
+
+#tuned_modFit_SVM<-tune.svm(classe~., data = training_clean, gamma = 1, cost = 100, tunecontrol=tune.control(cross=10))
+
+readRDS(file = "best_SVM_model.rds")
+
+```
+
+As confirmed by the cross-validation, the Support Vector Machine algorithm trained with the original hyperparameters (cost = 100 and gamma = 1) provides the best fit to the training set and therefore will be used in predicting the test set.
